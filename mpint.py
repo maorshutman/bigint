@@ -184,8 +184,5 @@ class MPInt(torch.Tensor):
         raise NotImplemented
 
 
-
-
 if __name__ == "__main__":
-    import testing.tests
-    testing.tests.run()
+    pass

@@ -6,7 +6,7 @@ import torch
 
 _MP_PREC = 16
 _MP_ZPOS = 1
-_MP_ZNEG = 0
+_MP_NEG = 0
 
 
 class MPInt(torch.Tensor):
@@ -41,7 +41,7 @@ class MPInt(torch.Tensor):
             self.sign = self._sign(x)
 
         if type(x) == list:
-            self.used = self._used_in_list(x)
+            self.used = self._used_in_list(x[::-1])
         elif type(x) == int:
             self.used = self._used_in_list(self._py_int_to_tensor(x, self.alloc))
 
@@ -71,25 +71,26 @@ class MPInt(torch.Tensor):
         if x >= 0:
             return _MP_ZPOS
         else:
-            return _MP_ZNEG
+            return _MP_NEG
 
     @staticmethod
     def _used_in_list(x):
+        """Works with LSB ordering."""
         assert type(x) == list
         num_bits = len(x)
-        i = 0
-        while (i != num_bits) and (x[i] != 1):
-            i += 1
-        return num_bits - i
+        i = num_bits
+        while (i != 0) and (x[i - 1] != 1):
+            i -= 1
+        return i
 
-    @staticmethod
-    def _used_in_py_int(x):
-        """x is a python int."""
-        used = 0
-        while x != 0:
-            used += 1
-            x = x // 2
-        return used
+    # @staticmethod
+    # def _used_in_py_int(x):
+    #     """x is a python int."""
+    #     used = 0
+    #     while x != 0:
+    #         used += 1
+    #         x = x // 2
+    #     return used
 
     @staticmethod
     def _zero_pad(x, alloc):
@@ -121,11 +122,46 @@ class MPInt(torch.Tensor):
         assert self.data.shape[1] == self.alloc
 
     def mp_clamp(self):
+        """Remove excess zeros."""
         while self.used > 0 and self.data[0, self.used - 1] == 0:
             self.used -= 1
         if self.used == 0:
             self.sign = _MP_ZPOS
 
+    def mp_copy(self, x):
+        """Copy x."""
+        self.alloc = x.alloc
+        self.used = x.used
+        self.sign = x.sign
+        self.data = x.data
+
+    def mp_init_copy(self):
+        """Create a new copy of self."""
+        cp = MPInt(0, bits=self.alloc)
+        cp.mp_copy(self)
+        return cp
+
+    def mp_zero(self):
+        """Zero the content."""
+        self.sign = _MP_ZPOS
+        self.data[0, :self.used] = 0
+        self.used = 0
+
+    def mp_abs(self):
+        """Return a copy of the abs."""
+        cp = self.mp_init_copy()
+        cp.sign = _MP_ZPOS
+        return cp
+
+    def mp_neg(self):
+        cp = self.mp_init_copy()
+        if cp.used == 0:
+            return cp
+        if cp.sign == _MP_ZPOS:
+            cp.sign = _MP_NEG
+        elif cp.sign == _MP_NEG:
+            cp.sign = _MP_ZPOS
+        return cp
 
     # Arithmetic ops.
     # TODO: Imp. in place version ?
@@ -148,32 +184,8 @@ class MPInt(torch.Tensor):
         raise NotImplemented
 
 
-# DEBUG
-x = MPInt([1, 1, 0], bits=16)
-y = MPInt(int(-1), bits=16)
-z = MPInt(int(0), bits=16)
-
-print(x, x.sign, x.used, x.shape)
-print(y, y.sign, y.used, y.shape)
 
 
-print(id(x))
-x.mp_grow(31)
-print(id(x))
-print(x.shape, x.used)
-
-x.mp_clamp()
-print("before clamp", x)
-print("clamped:", x.shape, x.used, x.sign)
-
-y.mp_clamp()
-print("before clamp", y)
-print("clamped:", y.shape, y.used, y.sign)
-
-z.mp_clamp()
-print("before clamp", z)
-print("clamped:", z.shape, z.used, z.sign)
-
-
-# z = torch.add(x, y)
-# print(z)
+if __name__ == "__main__":
+    import testing.tests
+    testing.tests.run()

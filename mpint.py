@@ -1,16 +1,23 @@
 import numpy as np
 import torch
 
-# TODO: Consider arbitrary base ?
+# Followed BigNum Math, by Tom St Denis.
 
 
-_MP_PREC = 16
+_MP_PREC = 32
+
+# Sign return codes.
 _MP_ZPOS = 1
 _MP_NEG = 0
 
+# Comparison return codes.
+_MP_GT = 1
+_MP_EQ = 0
+_MP_LT = -1
+
 
 class MPInt(torch.Tensor):
-    """Multiple-Precision Integer."""
+    """Multiple-Precision Integers based on torch Tensor."""
 
     def __new__(cls, x, bits, sign=_MP_ZPOS, *args, **kwargs):
         # Input validity check.
@@ -30,10 +37,6 @@ class MPInt(torch.Tensor):
     def __init__(self, x, bits, sign=_MP_ZPOS):
         # Allocated number of bits.
         self.alloc = bits
-
-        # User can give list and sign (1/positive by default)
-        # or python int with sign
-        # Sign bit.
 
         # With a list the user has to specify the sign. The sign is _MP_ZPOS.
         self.sign = sign
@@ -82,15 +85,6 @@ class MPInt(torch.Tensor):
         while (i != 0) and (x[i - 1] != 1):
             i -= 1
         return i
-
-    # @staticmethod
-    # def _used_in_py_int(x):
-    #     """x is a python int."""
-    #     used = 0
-    #     while x != 0:
-    #         used += 1
-    #         x = x // 2
-    #     return used
 
     @staticmethod
     def _zero_pad(x, alloc):
@@ -163,21 +157,42 @@ class MPInt(torch.Tensor):
             cp.sign = _MP_ZPOS
         return cp
 
-    # Arithmetic ops.
-    # TODO: Imp. in place version ?
+    # Comparison operators.
     @staticmethod
-    def mp_add(x, y):
-        """Returns a new MPInt."""
-        # O(n)
-        w = None
-        return w
+    def mp_cmp_mag(x, y):
+        if x.used > y.used:
+            return _MP_GT
+        if x.used < y.used:
+            return _MP_LT
 
-    def mp_sub(self, x, y):
-        # O(n)
+        for i in reversed(range(x.used)):
+            if x[0, i] > y[0, i]:
+                return _MP_GT
+            elif x[0, i] < y[0, i]:
+                return _MP_LT
+        return _MP_EQ
+
+    @staticmethod
+    def mp_cmp(x, y):
+        if (x.sign == _MP_NEG) and (y.sign == _MP_ZPOS):
+            return _MP_LT
+        if (x.sign == _MP_ZPOS) and (y.sign == _MP_NEG):
+            return _MP_GT
+        if x.sign == _MP_NEG:
+            return MPInt.mp_cmp_mag(y, x)
+        else:
+            return MPInt.mp_cmp_mag(x, y)
+
+    # Arithmetic operations.
+    @staticmethod
+    def s_mp_add(x, y):
+        raise NotImplemented
+
+    @staticmethod
+    def s_mp_sub(self, x, y):
         raise NotImplemented
 
     def mp_mult(self, x, y):
-        # TODO: Karatsuba in numbers are large enough ?
         raise NotImplemented
 
     def mp_divide(self, x, y):
